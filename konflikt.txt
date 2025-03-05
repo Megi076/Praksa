@@ -1,1 +1,2 @@
 "Ova e promena na master" 
+"ova e promena na novaGranka" 
