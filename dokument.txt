@@ -1,0 +1,22 @@
+1. Vraka validen za
+a. 0101000000010
+b. 2902000000010
+c. 2902000000001 - Dali prvoto mashko pocnuva so 000 ili 001
+2. za prazen embbg - treba da vrati 400 - bad request so poraka opisna na mk. ili mozesh skripta so Powershell ili Postman
+
+3. IIS (Internet Information Services) - web server koj doaga so Windows-ot, i na ovoj ke vidish kako se konfigurira api-to shto e napraveno da bide hostirano
+
+4. Da se napravi nadvoreshno programce ili skripta za povikuvanje na API-to
+
+
+razlika pomegu .NET Framework i .NET Core, .NET, .Framework go utepa Microsoft, nekako kratko istorisko video na youtube moze da se najde koe ke objasni
+
+konfiguraijca na IIS , inetpub\wwwroot, kratko video na youtube
+
+
+ke procitate/youtube - osnovi na kriptografija, javni/privatni klucevi, git repo-to
+a. Kako da se kreira lokalno (na kompjuterot za tvojot profil), par javen i prifaten kluc, javniot ide kaj nashiot administrator za da dade pristap na internoto repo za proektov
+
+Matea otkako ke generira embg da se povika servisot na Megi za proverka na validnost http://PC-05:8080/api/Embg
+
+a obratno otkako Matea ke hostira kaj nea na IIS servisot za generiranje na embg, ke povikash od kaj tebe http://PC-04:<porta>//...
