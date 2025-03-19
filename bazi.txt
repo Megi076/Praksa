@@ -1,0 +1,32 @@
+Ќе креираш нова празна база и 1 табела која ќе биде пополнета со записи за такси возења
+
+Фајлот во прилог треба да се импортира во табела во SQL
+
+polinjata od csv se so slednovo znacenje
+
+medallion - broj na licencata
+hashLicense - hash od liceto + licencata
+pickupTime
+dropOffTime
+duration
+distance vo milii (miles)
+
+pLongitude; --georeferenci na pojdovna tocka
+pLatitude;
+
+dLongitude; --georeferenci na dojdovna tocka
+dLatitude;
+
+paymentType --kako e plateno, karticka, kesh, nepoznato
+
+fareAmount --slednite polinja se 6 iznosi vo USD
+surchange
+tax
+tipAmount
+tollsAmount
+totalAmount
+
+1. Да се направат следниве sql изрази
+а. Листа на возења над 10 долари
+б. Најскапо возење, најефтино возење како сооднос вкупна цена/поминат пат
+в. групирање на возења по начин на плаќање
