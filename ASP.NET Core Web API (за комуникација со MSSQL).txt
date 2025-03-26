@@ -1,0 +1,139 @@
+Ke moze li cekor po cekor da mi opises sto treba tocno da napisam? 
+
+
+ChatGPT said:
+Да, ќе ти објаснам чекор по чекор како да го направиш овој проект. Ќе имаш две апликации:
+
+ASP.NET Core Web API (за комуникација со MSSQL)
+
+Blazor WebAssembly (за прикажување на податоците со страничење)
+
+Чекор 1: Креирање на Web API
+Ова е серверската апликација што ќе комуницира со базата.
+
+1.1 Креирај ASP.NET Core Web API проект
+Отвори Visual Studio
+
+Избери Create a new project
+
+Барај ASP.NET Core Web API
+
+Кликни Next
+
+Дади име, на пример: TaxiServiceAPI
+
+Избери .NET 8.0
+
+Кликни Create
+
+1.2 Додај Entity Framework Core
+Во Package Manager Console (или Tools > NuGet Package Manager > Manage NuGet Packages), инсталирај ги следниве пакети:
+
+Install-Package Microsoft.EntityFrameworkCore.SqlServer
+Install-Package Microsoft.EntityFrameworkCore.Tools
+
+1.3 Додај модел за такси возења
+Во Models/TaxiRide.cs, направи го следново:
+public class TaxiRide
+{
+    public int Id { get; set; }
+    public string DriverName { get; set; } = string.Empty;
+    public string Destination { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public DateTime RideDate { get; set; }
+}
+
+
+1.4 Креирај DbContext за базата
+Во Data/TaxiServiceDbContext.cs, додај го следново: 
+
+using Microsoft.EntityFrameworkCore;
+
+public class TaxiServiceDbContext : DbContext
+{
+    public TaxiServiceDbContext(DbContextOptions<TaxiServiceDbContext> options) : base(options) { }
+
+    public DbSet<TaxiRide> TaxiRides { get; set; }
+}
+
+
+1.5 Додај конекција кон MSSQL
+Во appsettings.json, најди "ConnectionStrings" и промени го во:
+"ConnectionStrings": {
+    "DefaultConnection": "Server=YOUR_SERVER;Database=TaxiServiceDB;Trusted_Connection=True;TrustServerCertificate=True;"
+}
+
+1.6 Регистрирај ја базата во Program.cs
+Во Program.cs, додај го следново:
+
+using Microsoft.EntityFrameworkCore;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDbContext<TaxiServiceDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+var app = builder.Build();
+app.UseSwagger();
+app.UseSwaggerUI();
+app.UseAuthorization();
+app.MapControllers();
+app.Run();
+
+1.7 Направи миграции и креирај ја базата
+Во Package Manager Console, изврши:
+Add-Migration InitialCreate
+Update-Database
+
+1.8 Направи API контролер за податоците
+Во Controllers/TaxiRidesController.cs:
+
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+[Route("api/[controller]")]
+[ApiController]
+public class TaxiRidesController : ControllerBase
+{
+    private readonly TaxiServiceDbContext _context;
+
+    public TaxiRidesController(TaxiServiceDbContext context)
+    {
+        _context = context;
+    }
+
+    [HttpGet("{page}/{pageSize}")]
+    public async Task<IActionResult> GetPagedRides(int page, int pageSize)
+    {
+        var totalRecords = await _context.TaxiRides.CountAsync();
+        var rides = await _context.TaxiRides
+            .OrderByDescending(r => r.RideDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return Ok(new { rides, totalRecords });
+    }
+}
+
+1.9 Тестирај го API-то
+Стартувај ја API апликацијата
+
+Отвори Swagger во https://localhost:5001/swagger
+
+Пробај **GET /api/TaxiRides/{page}/{pageSize}** со 1и5` како параметри
+
+
+
+
+
+
+
+
+
+
+
