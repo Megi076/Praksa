@@ -1,0 +1,320 @@
+🧩 Што точно ќе има твојата Blazor Server App (BlazorServerAppTaxiR):
+✔️ Структура на проектот: 
+BlazorServerAppTaxiR/
+│
+├── wwwroot/
+│   └── js/
+│       └── site.js       👈 JavaScript за download
+│
+├── Data/
+│   └── TaxiRide.cs       👈 Модел
+│   └── TaxiRidesService.cs 👈 Сервис
+│
+├── Pages/
+│   └── TaxiRidesApp.razor 👈 Главна компонента
+│
+├── appsettings.json
+├── launchSettings.json
+├── App.razor
+├── _Imports.razor
+└── Program.cs
+
+🔧 1. wwwroot/js/site.js – JavaScript за download
+// Функција за преземање на фајловите
+function downloadFile(fileContent, fileDownloadOptions) {
+    // Создавање на Blob за генерирање на фајлови
+    var blob = new Blob([fileContent], { type: fileDownloadOptions.contentType });
+    var link = document.createElement("a");
+    
+    // Креирање на URL за фајлот
+    link.href = URL.createObjectURL(blob);
+    link.download = fileDownloadOptions.FileName;
+    
+    // Притискање на линкот за преземање
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+
+📄 2. Data/TaxiRide.cs – Модел
+namespace BlazorServerAppTaxiR.Data
+{
+    public class TaxiRide
+    {
+        public int Id { get; set; }
+        public string PickupLocation { get; set; }
+        public string DropoffLocation { get; set; }
+        public decimal FareAmount { get; set; }
+    }
+}
+
+🔧 3. Data/TaxiRidesService.cs – Сервис за API повици
+using System.Net.Http.Json;
+using Microsoft.JSInterop;
+
+namespace BlazorServerAppTaxiR.Data
+{
+    public class TaxiRidesService
+    {
+        private readonly HttpClient _httpClient;
+        private readonly IJSRuntime _jsRuntime;
+
+        public TaxiRidesService(HttpClient httpClient, IJSRuntime jsRuntime)
+        {
+            _httpClient = httpClient;
+            _jsRuntime = jsRuntime;
+        }
+
+        public async Task<List<TaxiRide>> GetTaxiRidesAsync()
+        {
+            return await _httpClient.GetFromJsonAsync<List<TaxiRide>>("http://localhost:5098/api/TaxiRides/GetTaxiRides");
+        }
+
+        public async Task DownloadExportFile(string format)
+        {
+            var stream = await _httpClient.GetStreamAsync($"http://localhost:5098/api/TaxiRides/export/{format}");
+
+            using var dotNetStreamRef = new DotNetStreamReference(stream);
+            await _jsRuntime.InvokeVoidAsync("downloadFile", $"taxirides", format, dotNetStreamRef);
+        }
+    }
+}
+
+🧩 4. Pages/TaxiRidesApp.razor – UI + пагинација + export
+@page "/taxiridesapp"
+@inject TaxiRidesService TaxiRidesService
+@using ClosedXML.Excel
+@using CsvHelper
+@using iTextSharp.text
+@using iTextSharp.text.pdf
+@using System.Globalization
+@using System.IO
+@using System.Linq
+
+<h3>Taxi Rides</h3>
+
+@if (TaxiRides == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Pickup</th>
+                <th>Dropoff</th>
+                <th>Fare</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var ride in PaginatedRides)
+            {
+                <tr>
+                    <td>@ride.PickupLocation</td>
+                    <td>@ride.DropoffLocation</td>
+                    <td>@ride.FareAmount</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <button @onclick="PreviousPage" disabled="@(_currentPage == 1)">Previous</button>
+    <button @onclick="NextPage" disabled="@(_currentPage * PageSize >= TaxiRides.Count)">Next</button>
+
+    <!-- Export Buttons -->
+    <button @onclick="ExportToExcel">Export to Excel</button>
+    <button @onclick="ExportToPDF">Export to PDF</button>
+    <button @onclick="ExportToCSV">Export to CSV</button>
+}
+
+@code {
+    private List<TaxiRide> TaxiRides;
+    private int _currentPage = 1;
+    private const int PageSize = 5;
+    private List<TaxiRide> PaginatedRides => TaxiRides.Skip((_currentPage - 1) * PageSize).Take(PageSize).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        TaxiRides = await TaxiRidesService.GetTaxiRidesAsync();
+    }
+
+    private void NextPage() { if (_currentPage * PageSize < TaxiRides.Count) _currentPage++; }
+    private void PreviousPage() { if (_currentPage > 1) _currentPage--; }
+
+    // Export to Excel
+    private void ExportToExcel()
+    {
+        var workbook = new XLWorkbook();
+        var worksheet = workbook.Worksheets.Add("Taxi Rides");
+
+        worksheet.Cell(1, 1).Value = "Pickup";
+        worksheet.Cell(1, 2).Value = "Dropoff";
+        worksheet.Cell(1, 3).Value = "Fare";
+
+        var row = 2;
+        foreach (var ride in TaxiRides)
+        {
+            worksheet.Cell(row, 1).Value = ride.PickupLocation;
+            worksheet.Cell(row, 2).Value = ride.DropoffLocation;
+            worksheet.Cell(row, 3).Value = ride.FareAmount;
+            row++;
+        }
+
+        using (var stream = new MemoryStream())
+        {
+            workbook.SaveAs(stream);
+            var fileContent = stream.ToArray();
+            var fileName = "TaxiRides.xlsx";
+            SaveAsFile(fileContent, fileName);
+        }
+    }
+
+    // Export to PDF
+    private void ExportToPDF()
+    {
+        var document = new Document();
+        using (var stream = new MemoryStream())
+        {
+            PdfWriter.GetInstance(document, stream);
+            document.Open();
+
+            var table = new PdfPTable(3);
+            table.AddCell("Pickup");
+            table.AddCell("Dropoff");
+            table.AddCell("Fare");
+
+            foreach (var ride in TaxiRides)
+            {
+                table.AddCell(ride.PickupLocation);
+                table.AddCell(ride.DropoffLocation);
+                table.AddCell(ride.FareAmount.ToString());
+            }
+
+            document.Add(table);
+            document.Close();
+
+            var fileContent = stream.ToArray();
+            var fileName = "TaxiRides.pdf";
+            SaveAsFile(fileContent, fileName);
+        }
+    }
+
+    // Export to CSV
+    private void ExportToCSV()
+    {
+        var csv = new StringWriter();
+        var csvWriter = new CsvWriter(csv, CultureInfo.InvariantCulture);
+
+        csvWriter.WriteRecords(TaxiRides);
+
+        var fileContent = csv.ToString();
+        var fileName = "TaxiRides.csv";
+        SaveAsFile(fileContent, fileName);
+    }
+
+    // Save file logic
+    private void SaveAsFile(byte[] content, string fileName)
+    {
+        var fileContent = new BlazorDownloadFileContent(content, "application/octet-stream");
+        var fileDownloadOptions = new BlazorDownloadFileOptions
+        {
+            FileName = fileName
+        };
+        JSRuntime.InvokeVoidAsync("downloadFile", fileContent, fileDownloadOptions);
+    }
+}
+
+⚙️ 5. Program.cs
+using BlazorServerAppTaxiR.Data;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddRazorPages();
+builder.Services.AddServerSideBlazor();
+builder.Services.AddHttpClient<TaxiRidesService>();
+builder.Services.AddScoped<TaxiRidesService>();
+builder.Services.AddScoped<IJSRuntime>(sp => sp.GetRequiredService<IJSRuntime>());
+
+var app = builder.Build();
+
+app.UseStaticFiles();
+app.UseRouting();
+
+app.MapBlazorHub();
+app.MapFallbackToPage("/_Host");
+
+app.Run();
+
+🧭 6. App.razor
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <p>Page not found.</p>
+        </LayoutView>
+    </NotFound>
+</Router>
+
+⚙️ 7. launchSettings.json
+{
+  "profiles": {
+    "BlazorServerAppTaxiR": {
+      "commandName": "Project",
+      "applicationUrl": "http://localhost:5020",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
+
+📁 8. appsettings.json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  }
+} 
+
+host.cshtml
+@page "/"
+@namespace YourNamespace
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@using YourNamespace.Components
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Taxi Rides Export</title>
+
+    <base href="/" />
+    
+    <!-- Blazor script -->
+    <script src="_framework/blazor.server.js"></script>
+    
+    <!-- Вклучување на site.js за обработка на извоз -->
+    <script src="~/js/site.js"></script>
+
+</head>
+<body>
+    <app>@Body</app>
+
+    <!-- Преземање на Blazor Server апликацијата -->
+    <component type="typeof(App)" render-mode="Interactive" />
+
+</body>
+</html>
+
+
+Install-Package ClosedXML
+Install-Package iTextSharp.LGPLv2.Core
+Install-Package CsvHelper
+
+

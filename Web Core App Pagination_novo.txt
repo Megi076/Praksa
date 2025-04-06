@@ -1,0 +1,108 @@
+Web Core App Pagination
+// Program.cs
+using Newtonsoft.Json.Serialization;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+builder.Services.AddControllers().AddNewtonsoftJson(options =>
+    options.SerializerSettings.ReferenceLoopHandling = Newtonsoft.Json.ReferenceLoopHandling.Ignore)
+    .AddNewtonsoftJson(options => options.SerializerSettings.ContractResolver = new DefaultContractResolver());
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowBlazorApp", policy =>
+    {
+        policy.WithOrigins("http://localhost:5054")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
+var app = builder.Build();
+
+app.UseCors("AllowBlazorApp");
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseAuthorization();
+
+app.MapControllers();
+
+app.Run();
+
+✅ TaxiRidesController.cs 
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
+using System.Data;
+
+namespace webapi.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class TaxiRidesController : ControllerBase
+    {
+        private IConfiguration _configuration;
+
+        public TaxiRidesController(IConfiguration configuration)
+        {
+            _configuration = configuration;
+        }
+
+        [HttpGet]
+        [Route("GetTaxiRides")]
+        public JsonResult GetTaxiRides()
+        {
+            string query = "SELECT * FROM dbo.TaxiRides";
+            DataTable table = new DataTable();
+            string sqlDataSource = _configuration.GetConnectionString("TaxiServiceDBCon");
+            SqlDataReader myReader;
+
+            using (SqlConnection myCon = new SqlConnection(sqlDataSource))
+            {
+                myCon.Open();
+                using var myCommand = new SqlCommand(query, myCon);
+                myReader = myCommand.ExecuteReader();
+                table.Load(myReader);
+                myReader.Close();
+                myCon.Close();
+            }
+
+            return new JsonResult(table);
+        }
+    }
+}
+✅ appsettings.json
+{
+  "ConnectionStrings": {
+    "TaxiServiceDBCon": "Server=pc-05\\SQL2019;Database=TaxiServiceDB;User Id=sa;Password=sa;TrustServerCertificate=True;"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*"
+}
+
+✅ launchSettings.json (наоѓа се во Properties)
+{
+  "profiles": {
+    "WebCoreAppPagination": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "applicationUrl": "http://localhost:5098",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
