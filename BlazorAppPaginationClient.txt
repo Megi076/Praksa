@@ -1,0 +1,305 @@
+@page "/"
+@namespace BlazorAppPaginationClient
+@addTagHelper *, Microsoft.AspNetCore.Components
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BlazorAppPaginationClient</title>
+    <link href="css/bootstrap/bootstrap.min.css" rel="stylesheet" />
+</head>
+<body>
+    <app>
+        <component type="typeof(App)" render-mode="Interactive" />
+    </app>
+
+    <!-- This script is essential for Blazor Server-side functionality -->
+    <script src="_framework/blazor.server.js"></script>
+</body>
+</html>
+
+
+{
+  "iisSettings": {
+    "windowsAuthentication": false,
+    "anonymousAuthentication": true,
+    "iisExpress": {
+      "applicationUrl": "http://localhost:47748"
+    }
+  },
+  "profiles": {
+    "BlazorAppPaginationClient": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "applicationUrl": "http://localhost:5204", // тргнато https
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "IIS Express": {
+      "commandName": "IISExpress",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
+
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*"
+}
+
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">BlazorAppPaginationClient</a>
+        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </div>
+</div>
+
+<div class="@NavMenuCssClass" @onclick="ToggleNavMenu">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="oi oi-home" aria-hidden="true"></span> Home
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="counter">
+                <span class="oi oi-plus" aria-hidden="true"></span> Counter
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="data">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> Data
+            </NavLink>
+        </div>
+    </nav>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}
+
+@page "/paginateddata"
+@using BlazorAppPaginationClient.Models
+@using System.Text
+@inject IJSRuntime JSRuntime
+@inject HttpClient Http
+
+<h3>Taxi Ride Data</h3>
+
+<button class="btn btn-primary" @onclick="ExportToCsv">Export to CSV</button>
+<button class="btn btn-success" @onclick="ExportToExcel">Export to Excel</button>
+<button class="btn btn-danger" @onclick="ExportToPdf">Export to PDF</button>
+
+@* Paginated data table goes here *@
+<table class="table">
+    <thead>
+        <tr>
+            <th>Medallion</th>
+            <th>Hash License</th>
+            <th>Pickup Time</th>
+            <th>Drop-off Time</th>
+            <th>Duration</th>
+            <th>Distance</th>
+            <th>Pickup Longitude</th>
+            <th>Pickup Latitude</th>
+            <th>Drop-off Longitude</th>
+            <th>Drop-off Latitude</th>
+            <th>Payment Type</th>
+            <th>Fare Amount</th>
+            <th>Surcharge</th>
+            <th>Tax</th>
+            <th>Tip Amount</th>
+            <th>Tolls Amount</th>
+            <th>Total Amount</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in paginatedData)
+        {
+            <tr>
+                <td>@item.medallion</td>
+                <td>@item.hashLicense</td>
+                <td>@item.pickupTime</td>
+                <td>@item.dropOffTime</td>
+                <td>@item.duration</td>
+                <td>@item.distance</td>
+                <td>@item.pLongitude</td>
+                <td>@item.pLatitude</td>
+                <td>@item.dLongitude</td>
+                <td>@item.dLatitude</td>
+                <td>@item.paymentType</td>
+                <td>@item.fareAmount</td>
+                <td>@item.surcharge</td>
+                <td>@item.tax</td>
+                <td>@item.tipAmount</td>
+                <td>@item.tollsAmount</td>
+                <td>@item.totalAmount</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<TaxiRecord> paginatedData = new List<TaxiRecord>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Fetch the data for the page from the external API
+        try
+        {
+            // API call to fetch taxi ride data from the specified API
+            paginatedData = await Http.GetFromJsonAsync<List<TaxiRecord>>("http://localhost:5098/api/TaxiRides/GetTaxiRides2");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred while fetching data: {ex.Message}");
+        }
+    }
+
+    private async Task ExportToCsv()
+    {
+        var csvContent = GenerateCsvContent(paginatedData);
+        await JSRuntime.InvokeVoidAsync("saveAsFile", "taxi_rides.csv", csvContent);
+    }
+
+    private async Task ExportToExcel()
+    {
+        var excelContent = GenerateExcelContent(paginatedData);
+        await JSRuntime.InvokeVoidAsync("saveExcel", "taxi_rides.xlsx", excelContent);
+    }
+
+    private async Task ExportToPdf()
+    {
+        var pdfContent = GeneratePdfContent(paginatedData);
+        await JSRuntime.InvokeVoidAsync("savePdf", "taxi_rides.pdf", pdfContent);
+    }
+
+    private string GenerateCsvContent(List<TaxiRecord> data)
+    {
+        // Create CSV content from data
+        var sb = new StringBuilder();
+        sb.AppendLine("Medallion,Hash License,Pickup Time,Drop-off Time,Duration,Distance,Pickup Longitude,Pickup Latitude,Drop-off Longitude,Drop-off Latitude,Payment Type,Fare Amount,Surcharge,Tax,Tip Amount,Tolls Amount,Total Amount");
+
+        foreach (var item in data)
+        {
+            sb.AppendLine($"{item.medallion},{item.hashLicense},{item.pickupTime},{item.dropOffTime},{item.duration},{item.distance},{item.pLongitude},{item.pLatitude},{item.dLongitude},{item.dLatitude},{item.paymentType},{item.fareAmount},{item.surcharge},{item.tax},{item.tipAmount},{item.tollsAmount},{item.totalAmount}");
+        }
+
+        return sb.ToString();
+    }
+
+    private object GenerateExcelContent(List<TaxiRecord> data)
+    {
+        // Create Excel content using xlsx.js
+        var sheet = new List<List<object>>();
+        sheet.Add(new List<object> { "Medallion", "Hash License", "Pickup Time", "Drop-off Time", "Duration", "Distance", "Pickup Longitude", "Pickup Latitude", "Drop-off Longitude", "Drop-off Latitude", "Payment Type", "Fare Amount", "Surcharge", "Tax", "Tip Amount", "Tolls Amount", "Total Amount" });
+
+        foreach (var item in data)
+        {
+            sheet.Add(new List<object> { item.medallion, item.hashLicense, item.pickupTime, item.dropOffTime, item.duration, item.distance, item.pLongitude, item.pLatitude, item.dLongitude, item.dLatitude, item.paymentType, item.fareAmount, item.surcharge, item.tax, item.tipAmount, item.tollsAmount, item.totalAmount });
+        }
+
+        return sheet;
+    }
+
+    private string GeneratePdfContent(List<TaxiRecord> data)
+    {
+        // Generate PDF content (basic text)
+        var content = "Taxi Ride Data:\n\n";
+        foreach (var item in data)
+        {
+            content += $"Medallion: {item.medallion}, Hash License: {item.hashLicense}, Pickup: {item.pickupTime}, Drop-off: {item.dropOffTime}, Total Amount: {item.totalAmount}\n";
+        }
+        return content;
+    }
+}
+
+namespace BlazorAppPaginationClient.Models
+{
+    public class TaxiRecord
+    {
+        public string medallion { get; set; } = string.Empty; // Број на лиценцата
+        public string hashLicense { get; set; } = string.Empty; // Хеш од лицето + лиценцата
+        public DateTime pickupTime { get; set; } // Време на подигнување
+        public DateTime dropOffTime { get; set; } // Време на симнување
+        public int duration { get; set; } // Времетраење во секунди
+        public float distance { get; set; } // Растојание во милји
+        public float pLongitude { get; set; } // Географска должина на појдовната точка
+        public float pLatitude { get; set; } // Географска ширина на појдовната точка
+        public float dLongitude { get; set; } // Географска должина на дојдовната точка
+        public float dLatitude { get; set; } // Географска ширина на дојдовната точка
+        public string paymentType { get; set; } = string.Empty; // Тип на плаќање (кеш, картичка, не познато)
+        public float fareAmount { get; set; } // Основа цена во USD
+        public float surcharge { get; set; } // Доплата во USD
+        public float tax { get; set; } // Данок во USD
+        public float tipAmount { get; set; } // Бакшиш во USD
+        public float tollsAmount { get; set; } // Такси за патишта во USD
+        public float totalAmount { get; set; } // Вкупен износ во USD
+    }
+}
+
+using BlazorAppPaginationClient;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.DependencyInjection;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Додавање на Razor Pages и Blazor Server
+builder.Services.AddRazorPages();
+builder.Services.AddServerSideBlazor();
+
+// Останати сервисни конфигурации, ако има
+// builder.Services.AddSingleton<WeatherForecastService>();
+
+var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
+}
+else
+{
+    app.UseExceptionHandler("/Error");
+    app.UseHsts();
+}
+
+app.UseHttpsRedirection();
+app.UseStaticFiles();
+
+app.UseRouting();
+
+app.MapBlazorHub();
+app.MapFallbackToPage("/_Host");
+
+app.Run();
+
+greskata: 
+
+[2025-04-07T13:14:16.765Z] Information: Normalizing '_blazor' to 'http://localhost:5204/_blazor'.
+blazor.server.js:1 [2025-04-07T13:14:16.788Z] Information: WebSocket connected to ws://localhost:5204/_blazor?id=oKvWaQ-2U7Bf7rUJWpvyhQ.
+aspnetcore-browser-refresh.js:234 WebSocket connection to 'wss://localhost:44334/BlazorAppPaginationClient/' failed: 
+(anonymous)	@	aspnetcore-browser-refresh.js:234
