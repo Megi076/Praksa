@@ -1,0 +1,299 @@
+✅ Program.cs – целосен код:
+using BlazorAppPaginationClient;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.Http.Connections; // Додадено за WebSockets
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Додавање на Razor Pages и Blazor Server
+builder.Services.AddRazorPages();
+builder.Services.AddServerSideBlazor()
+    .AddHubOptions(options =>
+    {
+        // Присилно користење само на WebSockets преку ws://
+        options.Transports = HttpTransportType.WebSockets;
+    });
+
+// Останати сервиси (ако има)
+// builder.Services.AddSingleton<WeatherForecastService>();
+
+var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
+}
+else
+{
+    app.UseExceptionHandler("/Error");
+    app.UseHsts();
+}
+
+// ⚠️ Коментирано за да не бара HTTPS
+// app.UseHttpsRedirection();
+
+app.UseStaticFiles();
+app.UseRouting();
+
+app.MapBlazorHub();
+app.MapFallbackToPage("/_Host");
+
+app.Run();
+
+✅ Pages/_Host.cshtml – целосен код: 
+@page "/"
+@namespace BlazorAppPaginationClient
+@addTagHelper *, Microsoft.AspNetCore.Components
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BlazorAppPaginationClient</title>
+    <link href="css/bootstrap/bootstrap.min.css" rel="stylesheet" />
+</head>
+<body>
+    <app>
+        <component type="typeof(App)" render-mode="Interactive" />
+    </app>
+
+    <!-- SignalR преку обичен ws:// -->
+    <script src="_framework/blazor.server.js?transport=webSockets"></script>
+</body>
+</html>
+
+✅ Properties/launchSettings.json – проверено дека нема https:
+{
+  "iisSettings": {
+    "windowsAuthentication": false,
+    "anonymousAuthentication": true,
+    "iisExpress": {
+      "applicationUrl": "http://localhost:47748"
+    }
+  },
+  "profiles": {
+    "BlazorAppPaginationClient": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "applicationUrl": "http://localhost:5204",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "IIS Express": {
+      "commandName": "IISExpress",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
+
+
+site.js 
+// Функција за извоз на CSV
+function saveAsFile(filename, content) {
+    var blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    var link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+}
+
+// Функција за извоз на Excel
+function saveExcel(filename, data) {
+    var ws = XLSX.utils.aoa_to_sheet(data);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Taxi Rides");
+    XLSX.writeFile(wb, filename);
+}
+
+// Функција за извоз на PDF
+function savePdf(filename, content) {
+    var doc = new jsPDF();
+    doc.text(content, 10, 10);
+    doc.save(filename);
+}
+
+
+PaginationData.razor
+
+@page "/paginateddata"
+@using BlazorAppPaginationClient.Models
+@inject IJSRuntime JSRuntime
+@inject HttpClient Http
+
+<h3>Taxi Ride Data</h3>
+
+<button class="btn btn-primary" @onclick="ExportToCsv">Export to CSV</button>
+<button class="btn btn-success" @onclick="ExportToExcel">Export to Excel</button>
+<button class="btn btn-danger" @onclick="ExportToPdf">Export to PDF</button>
+
+@* Paginated data table goes here *@
+<table class="table">
+    <thead>
+        <tr>
+            <th>Medallion</th>
+            <th>Hash License</th>
+            <th>Pickup Time</th>
+            <th>Drop-off Time</th>
+            <th>Duration</th>
+            <th>Distance</th>
+            <th>Pickup Longitude</th>
+            <th>Pickup Latitude</th>
+            <th>Drop-off Longitude</th>
+            <th>Drop-off Latitude</th>
+            <th>Payment Type</th>
+            <th>Fare Amount</th>
+            <th>Surcharge</th>
+            <th>Tax</th>
+            <th>Tip Amount</th>
+            <th>Tolls Amount</th>
+            <th>Total Amount</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in paginatedData)
+        {
+            <tr>
+                <td>@item.medallion</td>
+                <td>@item.hashLicense</td>
+                <td>@item.pickupTime</td>
+                <td>@item.dropOffTime</td>
+                <td>@item.duration</td>
+                <td>@item.distance</td>
+                <td>@item.pLongitude</td>
+                <td>@item.pLatitude</td>
+                <td>@item.dLongitude</td>
+                <td>@item.dLatitude</td>
+                <td>@item.paymentType</td>
+                <td>@item.fareAmount</td>
+                <td>@item.surcharge</td>
+                <td>@item.tax</td>
+                <td>@item.tipAmount</td>
+                <td>@item.tollsAmount</td>
+                <td>@item.totalAmount</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<TaxiRecord> paginatedData = new List<TaxiRecord>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            paginatedData = await Http.GetFromJsonAsync<List<TaxiRecord>>("http://localhost:5098/api/TaxiRides/GetTaxiRides2");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred while fetching data: {ex.Message}");
+        }
+    }
+
+    private async Task ExportToCsv()
+    {
+        var csvContent = GenerateCsvContent(paginatedData);
+        await JSRuntime.InvokeVoidAsync("saveAsFile", "taxi_rides.csv", csvContent);
+    }
+
+    private async Task ExportToExcel()
+    {
+        var excelContent = GenerateExcelContent(paginatedData);
+        await JSRuntime.InvokeVoidAsync("saveExcel", "taxi_rides.xlsx", excelContent);
+    }
+
+    private async Task ExportToPdf()
+    {
+        var pdfContent = GeneratePdfContent(paginatedData);
+        await JSRuntime.InvokeVoidAsync("savePdf", "taxi_rides.pdf", pdfContent);
+    }
+
+    private string GenerateCsvContent(List<TaxiRecord> data)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Medallion,Hash License,Pickup Time,Drop-off Time,Duration,Distance,Pickup Longitude,Pickup Latitude,Drop-off Longitude,Drop-off Latitude,Payment Type,Fare Amount,Surcharge,Tax,Tip Amount,Tolls Amount,Total Amount");
+
+        foreach (var item in data)
+        {
+            sb.AppendLine($"{item.medallion},{item.hashLicense},{item.pickupTime},{item.dropOffTime},{item.duration},{item.distance},{item.pLongitude},{item.pLatitude},{item.dLongitude},{item.dLatitude},{item.paymentType},{item.fareAmount},{item.surcharge},{item.tax},{item.tipAmount},{item.tollsAmount},{item.totalAmount}");
+        }
+
+        return sb.ToString();
+    }
+
+    private object GenerateExcelContent(List<TaxiRecord> data)
+    {
+        var sheet = new List<List<object>> {
+            new List<object> { "Medallion", "Hash License", "Pickup Time", "Drop-off Time", "Duration", "Distance", "Pickup Longitude", "Pickup Latitude", "Drop-off Longitude", "Drop-off Latitude", "Payment Type", "Fare Amount", "Surcharge", "Tax", "Tip Amount", "Tolls Amount", "Total Amount" }
+        };
+
+        foreach (var item in data)
+        {
+            sheet.Add(new List<object> { item.medallion, item.hashLicense, item.pickupTime, item.dropOffTime, item.duration, item.distance, item.pLongitude, item.pLatitude, item.dLongitude, item.dLatitude, item.paymentType, item.fareAmount, item.surcharge, item.tax, item.tipAmount, item.tollsAmount, item.totalAmount });
+        }
+
+        return sheet;
+    }
+
+    private string GeneratePdfContent(List<TaxiRecord> data)
+    {
+        var content = "Taxi Ride Data:\n\n";
+        foreach (var item in data)
+        {
+            content += $"Medallion: {item.medallion}, Hash License: {item.hashLicense}, Pickup: {item.pickupTime}, Drop-off: {item.dropOffTime}, Total Amount: {item.totalAmount}\n";
+        }
+        return content;
+    }
+}
+
+za Host.cshtml cel kod 
+@page "/"
+@namespace BlazorAppPaginationClient
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Blazor App - Taxi Rides</title>
+    <base href="~/">
+
+    <!-- Blazor WebAssembly Script -->
+    <script src="_framework/blazor.server.js"></script>
+
+    <!-- Include SheetJS Library for Excel Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+
+    <!-- Include jsPDF Library for PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <!-- Link to your custom JS file (site.js) -->
+    <script src="site.js"></script>
+
+    <!-- Optional: Link to custom CSS for styling -->
+    <link href="css/app.css" rel="stylesheet" />
+</head>
+<body>
+    <div id="app">
+        <component type="typeof(App)" render-mode="ServerPrerendered" />
+    </div>
+
+    <!-- JS Interop for Blazor and your custom functionality -->
+    <script>
+        window.addEventListener('DOMContentLoaded', function () {
+            // Custom JS code to interact with Blazor or initialize further features
+        });
+    </script>
+</body>
+</html>
+
