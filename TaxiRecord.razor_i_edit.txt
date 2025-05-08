@@ -1,0 +1,382 @@
+@page "/taxi-records"
+@using GlobalApp.Models
+@using GlobalApp.Services
+@using GlobalApp.Shared
+@using Localization
+@using System.Text
+@inject ITaxiService TaxiService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@inject Localizer? Localizer
+
+<h1 style="text-align: center; margin-bottom: 50px;">@Localizer?.Taxi.Title</h1>
+
+<!-- Page Size Selector -->
+<div class="page-size-selector">
+    <label>@Localizer?.Taxi.RecordsPerPage:</label>
+    <select @onchange="OnPageSizeChanged" value="@pageSize">
+        <option value="10">10</option>
+        <option value="20">20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+    </select>
+</div>
+
+<div style="display: flex; gap: 10px;">
+    <input type="text" @bind="SearchText" placeholder="@Localizer?.Taxi.Search" />
+    <button @onclick="ApplySearch">@Localizer?.Taxi.Search</button>
+    <button @onclick="ResetSearch">@Localizer?.Taxi.Reset</button>
+</div>
+
+<!-- Export Buttons -->
+<div class="mb-3">
+    <button class="btn btn-primary me-2" @onclick="ExportToCsv">@Localizer?.Taxi.ExportToCsv</button>
+    <button class="btn btn-success" @onclick="ExportToExcel">@Localizer?.Taxi.ExportToExcel</button>
+    <button class="btn btn-primary" @onclick="ExportToPdf">@Localizer?.Taxi.ExportToPdf</button>
+</div>
+
+@if (IsLoading)
+{
+    <p>Loading...</p>
+}
+else if (taxiRecords == null || taxiRecords.Items.Count == 0)
+{
+    <p>@Localizer?.Taxi.NoResults ?? "No results found."</p>
+}
+else
+{
+    <!-- Table with darker text -->
+    <table id="taxiTable" class="table" style="color:  #000000;">
+        <thead>
+            <tr>
+                <th>#</th>
+                @foreach (var column in Columns)
+                {
+                    <th @onclick="() => SortBy(column.Property)" style="cursor:pointer;">
+                        @column.Label
+                        @if (sortColumn == column.Property)
+                        {
+                            <span>@(sortAscending ? "↑" : "↓")</span>
+                        }
+                    </th>
+                }
+                <th>@Localizer?.App.Actions</th> <!-- New column for Edit -->
+            </tr>
+        </thead>
+        <tbody>
+            @for (int i = 0; i < SortedTaxiRecords.Count; i++)
+            {
+                var record = SortedTaxiRecords[i];
+                <tr>
+                    <td>@((currentPage - 1) * pageSize + i + 1)</td>
+                    <td>@record.medallion</td>
+                    <td>@record.hashLicense</td>
+                    <td>@record.pickupTime</td>
+                    <td>@record.dropOffTime</td>
+                    <td>@record.duration</td>
+                    <td>@record.distance</td>
+                    <td>@record.pLongitude</td>
+                    <td>@record.pLatitude</td>
+                    <td>@record.dLongitude</td>
+                    <td>@record.dLatitude</td>
+                    <td>@record.paymentType</td>
+                    <td>@record.fareAmount</td>
+                    <td>@record.surcharge</td>
+                    <td>@record.tax</td>
+                    <td>@record.tipAmount</td>
+                    <td>@record.tollsAmount</td>
+                    <td>@record.totalAmount</td>
+                    <td>
+                        <button class="btn btn-warning btn-sm" @onclick="@(() => EditRecord(record))">
+                            @Localizer?.App.Edit
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <!-- Pagination Controls -->
+    <div class="pagination" style="color: #212121;">
+        <button @onclick="async () => await ChangePage(currentPage - 1)" disabled="@(!HasPreviousPage)" style="color: #212121; font-weight: bold;">
+            @Localizer?.App.Previous
+        </button>
+        <span style="color: #212121; font-weight: bold;">@Localizer?.Taxi.Page @currentPage @Localizer?.Taxi.OutOf @totalPages</span>
+        <button @onclick="async () => await ChangePage(currentPage + 1)" disabled="@(!HasNextPage)" style="color: #212121; font-weight: bold;">
+            @Localizer?.App.Next
+        </button>
+    </div>
+
+    <div class="total-records" style="text-align: right;">
+        <strong>@Localizer?.Taxi.TotalRecords</strong>: @taxiRecords.TotalItems
+    </div>
+}
+
+@code {
+    private PagedResult<TaxiRecord> taxiRecords = new();
+    private int currentPage = 1;
+    private int totalPages = 1;
+    private int pageSize = 10;
+    private bool IsLoading = false;
+    private string sortColumn = nameof(TaxiRecord.medallion);
+    private bool sortAscending = true;
+    private string SearchText = string.Empty;
+
+    private bool HasNextPage => currentPage < totalPages;
+    private bool HasPreviousPage => currentPage > 1;
+
+    private List<(string Property, string Label)> Columns => new()
+    {
+        (nameof(TaxiRecord.medallion), Localizer?.Taxi.Medallion ?? "Medallion"),
+        (nameof(TaxiRecord.hashLicense), Localizer?.Taxi.HashLicense ?? "License"),
+        (nameof(TaxiRecord.pickupTime), Localizer?.Taxi.PickupTime ?? "Pickup"),
+        (nameof(TaxiRecord.dropOffTime), Localizer?.Taxi.DropOffTime ?? "DropOff"),
+        (nameof(TaxiRecord.duration), Localizer?.Taxi.Duration ?? "Duration"),
+        (nameof(TaxiRecord.distance), Localizer?.Taxi.Distance ?? "Distance"),
+        (nameof(TaxiRecord.pLongitude), Localizer?.Taxi.PLongitude ?? "Pickup Long"),
+        (nameof(TaxiRecord.pLatitude), Localizer?.Taxi.PLatitude ?? "Pickup Lat"),
+        (nameof(TaxiRecord.dLongitude), Localizer?.Taxi.DLongitude ?? "Dropoff Long"),
+        (nameof(TaxiRecord.dLatitude), Localizer?.Taxi.DLatitude ?? "Dropoff Lat"),
+        (nameof(TaxiRecord.paymentType), Localizer?.Taxi.PaymentType ?? "Payment"),
+        (nameof(TaxiRecord.fareAmount), Localizer?.Taxi.FareAmount ?? "Fare"),
+        (nameof(TaxiRecord.surcharge), Localizer?.Taxi.Surcharge ?? "Surcharge"),
+        (nameof(TaxiRecord.tax), Localizer?.Taxi.Tax ?? "Tax"),
+        (nameof(TaxiRecord.tipAmount), Localizer?.Taxi.TipAmount ?? "Tip"),
+        (nameof(TaxiRecord.tollsAmount), Localizer?.Taxi.TollsAmount ?? "Tolls"),
+        (nameof(TaxiRecord.totalAmount), Localizer?.Taxi.TotalAmount ?? "Total"),
+    };
+
+    private List<TaxiRecord> SortedTaxiRecords =>
+        (sortAscending
+            ? taxiRecords.Items.OrderBy(r => GetPropertyValue(r, sortColumn))
+            : taxiRecords.Items.OrderByDescending(r => GetPropertyValue(r, sortColumn))
+        ).ToList();
+
+    private object GetPropertyValue(TaxiRecord record, string propertyName)
+    {
+        var prop = typeof(TaxiRecord).GetProperty(propertyName);
+        return prop?.GetValue(record, null) ?? "";
+    }
+
+    private void SortBy(string columnName)
+    {
+        if (sortColumn == columnName)
+            sortAscending = !sortAscending;
+        else
+        {
+            sortColumn = columnName;
+            sortAscending = true;
+        }
+    }
+
+    private async Task ApplySearch()
+    {
+        IsLoading = true;
+        currentPage = 1;
+
+        if (double.TryParse(SearchText, out double numericValue))
+        {
+            await LoadTaxiRecordsAsync(isNumericSearch: true, numericValue: numericValue);
+        }
+        else
+        {
+            await LoadTaxiRecordsAsync(isNumericSearch: false);
+        }
+
+        IsLoading = false;
+    }
+
+    private async Task LoadTaxiRecordsAsync(bool isNumericSearch = false, double numericValue = 0)
+    {
+        if (isNumericSearch)
+        {
+            taxiRecords = await TaxiService.GetTaxiRecordsByNumericAsync(currentPage, pageSize, numericValue);
+        }
+        else
+        {
+            taxiRecords = await TaxiService.GetTaxiRecordsAsync(currentPage, pageSize, SearchText);
+        }
+
+        totalPages = (int)Math.Ceiling((double)taxiRecords.TotalItems / pageSize);
+    }
+
+    private async Task ResetSearch()
+    {
+        SearchText = string.Empty;
+        pageSize = 10;
+        currentPage = 1;
+        await LoadTaxiRecordsAsync();
+    }
+
+    private async Task ChangePage(int page)
+    {
+        if (page < 1 || page > totalPages) return;
+        currentPage = page;
+        await LoadTaxiRecordsAsync();
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        pageSize = int.Parse(e.Value.ToString() ?? "10");
+        currentPage = 1;
+        await LoadTaxiRecordsAsync();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTaxiRecordsAsync();
+    }
+
+    private async Task ExportToCsv()
+    {
+        var csvContent = GenerateCsvContent(taxiRecords.Items);
+        var byteArray = Encoding.UTF8.GetBytes(csvContent);
+        await JSRuntime.InvokeVoidAsync("saveAsFile", "taxi_records.csv", byteArray);
+    }
+
+    private string GenerateCsvContent(List<TaxiRecord> records)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(string.Join(",", Columns.Select(c => c.Label)));
+
+        foreach (var r in records)
+        {
+            sb.AppendLine($"{r.medallion},{r.hashLicense},{r.pickupTime},{r.dropOffTime},{r.duration},{r.distance},{r.pLongitude},{r.pLatitude},{r.dLongitude},{r.dLatitude},{r.paymentType},{r.fareAmount},{r.surcharge},{r.tax},{r.tipAmount},{r.tollsAmount},{r.totalAmount}");
+        }
+
+        return sb.ToString();
+    }
+
+    private async Task ExportToExcel()
+    {
+        await JSRuntime.InvokeVoidAsync("exportTableToExcel", "taxiTable", "TaxiRecords.xlsx");
+    }
+
+    private async Task ExportToPdf()
+    {
+        await JSRuntime.InvokeVoidAsync("exportTableToPdf", "taxiTable", "TaxiRecords.pdf");
+    }
+
+    private void EditRecord(TaxiRecord record)
+    {
+        // Navigate to edit page - adapt route as needed
+        NavigationManager.NavigateTo($"/taxi-records/edit/{record.medallion}");
+    }
+} 
+
+
+editraxirecord
+@page "/taxi-records/edit/{Medallion}"
+@using GlobalApp.Models
+@using GlobalApp.Services
+@inject ITaxiService TaxiService
+@inject NavigationManager NavigationManager
+
+<h3>Edit</h3>
+
+@if (record == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <EditForm Model="record" OnValidSubmit="HandleValidSubmit">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="mb-3">
+            <label>Medallion</label>
+            <InputText class="form-control" @bind-Value="record.medallion" disabled />
+        </div>
+
+        <div class="mb-3">
+            <label>License Hash</label>
+            <InputText class="form-control" @bind-Value="record.hashLicense" />
+        </div>
+
+        <!-- Повтори за други полиња како пример: -->
+        <div class="mb-3">
+            <label>Fare Amount</label>
+            <InputNumber class="form-control" @bind-Value="record.fareAmount" />
+        </div>
+        <div class="mb-3">
+            <label>Payment Type</label>
+            <InputText class="form-control" @bind-Value="record.paymentType" />
+        </div>
+
+        <!-- Додај други полиња како што е потребно -->
+
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button class="btn btn-secondary" @onclick="GoBack">Back</button>
+    </EditForm>
+
+    @if (!isSuccess && !string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger mt-3" role="alert">
+            @errorMessage
+        </div>
+    }
+
+    @if (isSuccess)
+    {
+        <div class="alert alert-success mt-3" role="alert">
+            Record updated successfully!
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public string? Medallion { get; set; }
+
+    private TaxiRecord? record;
+    private bool isSuccess = false;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(Medallion))
+        {
+            record = await TaxiService.GetTaxiRecordByMedallionAsync(Medallion);
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        try
+        {
+            if (record != null)
+            {
+                // Ажурирање на записот
+                await TaxiService.UpdateTaxiRecordAsync(record);
+                // Освежување на записот
+                record = await TaxiService.GetTaxiRecordByMedallionAsync(record.medallion);
+                isSuccess = true;
+                errorMessage = null; // Нема грешка
+                StateHasChanged();
+
+                // Мал период на пауза за да се види успешната порака
+                await Task.Delay(2000);  // 2 секунди
+
+                // Пренасочување по успешно зачувување
+                NavigationManager.NavigateTo("/taxi-records");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Логирање на грешка
+            isSuccess = false;
+            errorMessage = $"Error updating record: {ex.Message}";  // Прикажи порака за грешка
+            StateHasChanged();
+        }
+    }
+
+    private void GoBack()
+    {
+        NavigationManager.NavigateTo("/taxi-records");
+    }
+}
+
+2 novi koloni, registered i last_updated, registered e elektronski datum koga zapisot e kreiran (insertiran),
+ ke ja azurirash kolona so now. a novata last_updated ke se azurira so edit funkcijata (avtomatski), 
+elektronski datum koga e azuriran (update-iran) zapisot. Posle redniot broj neka se prikazuvaat
